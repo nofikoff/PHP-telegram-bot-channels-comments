@@ -4,96 +4,59 @@ class CommentsBot
 {
     public $params, $telegramRequest;
 
-
     public function __construct($params)
     {
         $this->params = $params;
         $this->telegramRequest = @json_decode(file_get_contents("php://input"));
         $this->request_incoming();
-
     }
 
-    // Контролер вншених запросов
-    // СОБЫТИЯ В СИСТЕМЕ
-    // 1. Снаружи приходит запрос (GET POST) от третьего лица - генерируем сообщение типа ВОТ ТВОЯ ДОСТАВКА
-    // 2. Пользователь нажимает кнопку в какомто сообщени
-    // 3. Пользовател что то нам пишет HELLO
 
     public function request_incoming()
     {
-        // все другие пост гет запросы
-        if (isset($_REQUEST['order'])) {
-            $this->logs("poster.txt", print_r($_REQUEST, TRUE));
-            // ОТПРАВОЛЯЕМ ЗАКАЗ КУРЬЕРУ
-            // ОТПРАВОЛЯЕМ ЗАКАЗ КУРЬЕРУ
-            $this->parseRequest001createMessage();
-            // от сервера ТЛЕГРАМ
-        } else if ($this->telegramRequest) {
+        // все другие пост гет запросы на вебхуке
+        if ($this->telegramRequest) {
             $this->logs("telegramIncome.txt", print_r($this->telegramRequest, TRUE));
-            // если ппользоватьль набрал /start
 
-            if ($this->telegramRequest->message->text === "/start") {
-                $this->telegramSend(
-                    $this->telegramRequest->message->chat->id,
-                    "Сообщите менеджеру для регистрации в системе ваш чат телеграм ID : \n" . $this->telegramRequest->message->chat->id);
+            //  ШАГ 001 - если ппользоватьль набрал /start или перешел по ссылке вида tg://resolve?domain=ChernivtsiTheBest_bot&start=auth%3D11111
+            if (strpos($this->telegramRequest->message->text, "/start") === 0) {
+
+                if (preg_match('/\/start auth=(.*)/', $this->telegramRequest->message->text, $keySession)) {
+                    // на входе по ссылке пользователь передал нам номер свой ессии из cookes
+                    // использкем его для моджификации хранилища сесии на стороне сервера
+                    session_id($keySession[1]);
+                    session_start();
+
+                    $_SESSION['isauthorized'] = 1;
+                    $_SESSION['telegram_id'] = $this->telegramRequest->message->chat->id;
+                    $_SESSION['first_name'] = $this->telegramRequest->message->chat->first_name;
+                    $_SESSION['last_name'] = $this->telegramRequest->message->chat->last_name;
+                    $_SESSION['username'] = $this->telegramRequest->message->chat->username;
+
+                    $this->telegramSend(
+                        $this->telegramRequest->message->chat->id,
+                        "Вы авторизированы, можете вернуться на страницу: https://pogonyalo.com/test/chernovtsy/comments.php  \n");
+
+                } else {
+                    $this->telegramSend(
+                        $this->telegramRequest->message->chat->id,
+                        "Сбой авторизации https://pogonyalo.com/test/chernovtsy/ \n" . print_r($keySession, true));
+                }
+
             } elseif (isset($this->telegramRequest->message->text)) {
                 $this->telegramSend(
                     $this->telegramRequest->message->chat->id,
                     "Не понял"
                 );
+
             }
-            //
-            // если ппользоватьль нажал кнопку ДОСТАВЛЕНО
-            elseif (isset($this->telegramRequest->callback_query)) $this->controllerStartButoon();
         }
 
 
     }
 
-    private function controllerStartButoon()
-    {
 
-        //исзменить кнопку у курьера
-        $this->telegramSend(
-            $this->telegramRequest->callback_query->from->id,
-            $this->telegramRequest->callback_query->message->text .
-            "\n\n Доставлено " . date("H:i") 
-            ,
-            [], //нет кнопкопок
-            'editMessageText',
-            $this->telegramRequest->callback_query->message->message_id
-
-        );
-
-
-        // информируес менеджеров
-        $this->telegramSend(
-            $this->params->menegerOrdersIDChat,
-            "Выполнен в " . date("H:i")
-        );
-
-
-    }
-
-    private function parseRequest001createMessage()
-    {
-
-        $message = "Вот твой заказ для доставки КУРЬЕР";
-
-        // Шлем сообщение
-        // Шлем сообщение
-        $to = $this->params->adminIDChat;
-        $button =
-            [
-                [['text' => 'ДОСТАВИЛ ⏱ ' . date('H:i:s', time()) . '', 'callback_data' => '/?button=1']]
-            ];
-        $this->telegramSend($to, $message, $button);
-        $this->logs("myRequest.txt", print_r([$to, $message], TRUE));
-
-
-    }
-
-
+    // отправитель сообщений
     function telegramSend($telegramchatid, $msg, $button = [], $apiMethod = 'sendMessage', $editMessageID = '')
     {
         $this->logs("myRequest.txt", print_r([$this->telegramRequest->message->chat->id, $msg], TRUE));
